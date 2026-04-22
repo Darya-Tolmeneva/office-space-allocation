@@ -1,0 +1,5 @@
+server
+*_test.go
+tests/
+docs/
+*.md

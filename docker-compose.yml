@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: office_space_allocation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d office_space_allocation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/backend/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://postgres:postgres@postgres:5432/office_space_allocation?sslmode=disable"
+      - "up"
+
+  api:
+    build:
+      context: ./apps/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DSN: postgres://postgres:postgres@postgres:5432/office_space_allocation?sslmode=disable
+      JWT_SIGNING_KEY: dev-only-change-in-production
+      HTTP_ADDRESS: :8080
+    ports:
+      - "8080:8080"

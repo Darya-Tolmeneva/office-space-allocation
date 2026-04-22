@@ -1,0 +1,635 @@
+openapi: 3.1.0
+info:
+  title: FlowDesk API
+  version: 1.2.0
+  description: |
+    API для системы автоматизации гибких рабочих мест (hot-desking).
+    Поддерживает ручной и автоматический выбор рабочего места,
+    резервирование и освобождение мест.
+
+    В текущей версии API использует JWT Bearer authentication для всех операций,
+    которые создают или изменяют резервации. Пользователь определяется по access token,
+    а имя владельца брони заполняется сервером автоматически из профиля пользователя.
+servers:
+  - url: https://api.flowdesk.example.com/v1
+    description: Production
+  - url: http://localhost:8080/v1
+    description: Local dev
+
+tags:
+  - name: Auth
+    description: Регистрация и вход пользователя
+  - name: Desks
+    description: Рабочие места и их состояние
+  - name: Reservations
+    description: Резервирование и освобождение
+  - name: Auto-pick
+    description: Автоматический подбор места
+  - name: Floors
+    description: Офисы, этажи, зоны
+  - name: Analytics
+    description: Сводная статистика по загрузке
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Зарегистрировать пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Пользователь зарегистрирован
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновить токены по refresh-токену
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Новая пара токенов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Войти в систему
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /floors:
+    get:
+      tags: [Floors]
+      summary: Список этажей / офисов
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Floor' }
+
+  /floors/{floorId}:
+    get:
+      tags: [Floors]
+      summary: Получить план этажа со всеми местами
+      parameters:
+        - $ref: '#/components/parameters/FloorId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Floor'
+                  - type: object
+                    properties:
+                      desks:
+                        type: array
+                        items: { $ref: '#/components/schemas/Desk' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /desks:
+    get:
+      tags: [Desks]
+      summary: Список рабочих мест с фильтрами
+      parameters:
+        - in: query
+          name: floorId
+          schema: { type: string }
+        - in: query
+          name: zoneId
+          schema: { type: string }
+        - in: query
+          name: features
+          description: Требуемые фичи через запятую — monitor, wifi, quiet, dual_monitor, standing
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Desk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /desks/{deskId}:
+    get:
+      tags: [Desks]
+      summary: Информация о конкретном месте
+      parameters:
+        - $ref: '#/components/parameters/DeskId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Desk' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /desks/{deskId}/availability:
+    get:
+      tags: [Desks]
+      summary: Доступность места по слотам
+      parameters:
+        - $ref: '#/components/parameters/DeskId'
+        - in: query
+          name: from
+          required: true
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AvailabilitySlot' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /reservations:
+    get:
+      tags: [Reservations]
+      summary: Список резерваций (с фильтрами)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: deskId
+          schema: { type: string }
+        - in: query
+          name: floorId
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, cancelled, completed, all]
+            default: active
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reservation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+    post:
+      tags: [Reservations]
+      summary: Зарезервировать конкретное место (ручной выбор)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservationCreate' }
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /reservations/auto:
+    post:
+      tags: [Auto-pick, Reservations]
+      summary: Автоматически подобрать и зарезервировать место
+      description: |
+        Сервис подбирает первое подходящее active место по label ASC
+        с учётом floorId, zoneId и requiredFeatures.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AutoReservationRequest' }
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /reservations/auto/preview:
+    post:
+      tags: [Auto-pick]
+      summary: Предложить место без резервирования (превью авто-подбора)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AutoReservationRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AutoReservationPreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /reservations/{reservationId}:
+    get:
+      tags: [Reservations]
+      summary: Получить резервацию
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    delete:
+      tags: [Reservations]
+      summary: Освободить место (отменить резервацию)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '204': { description: Резервация отменена, место освобождено }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /reservations/{reservationId}/release:
+    post:
+      tags: [Reservations]
+      summary: Досрочно освободить место (с возможностью указать причину)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Сводная статистика для дашборда
+      parameters:
+        - in: query
+          name: floorId
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsSummary' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    FloorId:
+      in: path
+      name: floorId
+      required: true
+      schema: { type: string }
+    DeskId:
+      in: path
+      name: deskId
+      required: true
+      schema: { type: string }
+    ReservationId:
+      in: path
+      name: reservationId
+      required: true
+      schema: { type: string }
+
+  responses:
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Требуется аутентификация или токен недействителен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Доступ запрещён
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Конфликт состояния ресурса
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        fullName: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AuthUser:
+      type: object
+      required: [id, email, fullName, role, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        role:
+          type: string
+          enum: [member, admin]
+        status:
+          type: string
+          enum: [active, disabled]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TokenPair:
+      type: object
+      required: [accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresAt: { type: string, format: date-time }
+        refreshToken: { type: string }
+        refreshTokenExpiresAt: { type: string, format: date-time }
+
+    AuthResponse:
+      type: object
+      required: [user, tokens]
+      properties:
+        user: { $ref: '#/components/schemas/AuthUser' }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+
+    DeskState:
+      type: string
+      enum: [active, disabled]
+      description: Сохранённое состояние рабочего места из каталога
+
+    DeskFeature:
+      type: string
+      enum: [monitor, dual_monitor, wifi, ethernet, standing, quiet, window, near_kitchen, accessible]
+
+    Floor:
+      type: object
+      required: [id, name, timezone, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string, example: '4 этаж' }
+        timezone: { type: string, example: 'Europe/Moscow' }
+        floorPlanUrl: { type: string, format: uri, nullable: true }
+        createdAt: { type: string, format: date-time }
+        zones:
+          type: array
+          items: { $ref: '#/components/schemas/Zone' }
+
+    Zone:
+      type: object
+      required: [id, floorId, name, type, createdAt]
+      properties:
+        id: { type: string }
+        floorId: { type: string }
+        name: { type: string, example: 'Open Space A' }
+        type:
+          type: string
+          enum: [open_space, meeting_room, phone_booth, quiet_zone]
+        createdAt: { type: string, format: date-time }
+
+    DeskPosition:
+      type: object
+      required: [x, y]
+      properties:
+        x: { type: number, description: 'X в процентах от ширины плана', example: 40 }
+        y: { type: number, description: 'Y в процентах от высоты плана', example: 18 }
+
+    Desk:
+      type: object
+      required: [id, floorId, label, status, position, features, createdAt]
+      properties:
+        id: { type: string }
+        floorId: { type: string }
+        zoneId: { type: string, nullable: true }
+        label: { type: string, example: 'A1' }
+        status: { $ref: '#/components/schemas/DeskState' }
+        position: { $ref: '#/components/schemas/DeskPosition' }
+        features:
+          type: array
+          items: { $ref: '#/components/schemas/DeskFeature' }
+        createdAt: { type: string, format: date-time }
+
+    AvailabilitySlot:
+      type: object
+      required: [from, to, status]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [available, reserved, occupied, disabled]
+        reservationId: { type: string, nullable: true }
+
+    ReservationCreate:
+      type: object
+      required: [deskId, from, to]
+      properties:
+        deskId: { type: string }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        note: { type: string, nullable: true }
+
+    AutoReservationRequest:
+      type: object
+      required: [from, to]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        floorId: { type: string, nullable: true }
+        zoneId: { type: string, nullable: true }
+        requiredFeatures:
+          type: array
+          items: { $ref: '#/components/schemas/DeskFeature' }
+
+    AutoReservationPreview:
+      type: object
+      required: [desk, score, reasons]
+      properties:
+        desk: { $ref: '#/components/schemas/Desk' }
+        score:
+          type: number
+          description: Оценка соответствия фильтрам (0–1)
+        reasons:
+          type: array
+          items: { type: string }
+
+    Reservation:
+      type: object
+      required: [id, deskId, deskLabel, floorId, from, to, status, source, createdAt]
+      properties:
+        id: { type: string, description: 'Уникальный идентификатор брони' }
+        deskId: { type: string }
+        deskLabel: { type: string }
+        floorId: { type: string }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [active, completed, cancelled]
+        source:
+          type: string
+          enum: [manual, auto]
+        holderName:
+          type: string
+          nullable: true
+          description: Имя пользователя, автоматически заполненное сервером
+        note: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        averageOccupancy:
+          type: number
+          description: Средняя загрузка (0–1)
+          example: 0.68
+        peakDay:
+          type: string
+          example: 'Tuesday'
+        peakOccupancy:
+          type: number
+          example: 0.92
+        autoPickRatio:
+          type: number
+          description: Доля автоматических бронирований от общего числа (0–1)
+          example: 0.73
+        totalReservations:
+          type: integer
+        earlyReleases:
+          type: integer
+        topZone:
+          type: object
+          properties:
+            zoneId: { type: string }
+            name: { type: string }
+
+    ErrorPayload:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: 'not_found' }
+        message: { type: string }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorPayload'
