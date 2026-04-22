@@ -36,4 +36,17 @@ services:
       JWT_SIGNING_KEY: dev-only-change-in-production
       HTTP_ADDRESS: :8080
     ports:
-      - "8080:8080"
+      - "8067:8080"
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      args:
+        # The browser talks directly to the API over the host network,
+        # so we use the published host port rather than the container name.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8067/v1}
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "3001:80"
