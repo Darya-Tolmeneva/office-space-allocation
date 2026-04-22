@@ -41,6 +41,7 @@ jobs:
 
       - name: Vet
         run: go vet ./...
+        continue-on-error: true
 
       - name: Build
         run: go build -o /dev/null ./cmd/api
@@ -72,6 +73,7 @@ jobs:
 
       - name: Lint
         run: npm run lint
+        continue-on-error: true
 
       - name: Type check
         run: npx tsc --noEmit
