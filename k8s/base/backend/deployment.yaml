@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for postgres:5432..."
+              until nc -z postgres 5432; do
+                sleep 2
+              done
+              echo "PostgreSQL is ready"
+        - name: migrate
+          image: migrate/migrate:v4.17.0
+          args:
+            - "-path=/migrations"
+            - "-database=$(POSTGRES_DSN)"
+            - "up"
+          envFrom:
+            - secretRef:
+                name: app-secrets
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      containers:
+        - name: backend
+          image: office-space-allocation/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: migrations
+          configMap:
+            name: migrations
