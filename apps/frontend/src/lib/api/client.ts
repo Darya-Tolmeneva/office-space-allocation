@@ -17,7 +17,7 @@ const USER_KEY = "flowdesk.user";
 
 export const API_BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
-  "http://localhost:8080/v1";
+  "/v1";
 
 export class ApiError extends Error {
   status: number;
@@ -102,7 +102,8 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { body, auth = false, query, headers, _retried, ...rest } = opts;
 
-  const url = new URL(`${API_BASE_URL}${path}`);
+  const base = API_BASE_URL.startsWith("http") ? API_BASE_URL : `${window.location.origin}${API_BASE_URL}`;
+  const url = new URL(`${base}${path}`);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
