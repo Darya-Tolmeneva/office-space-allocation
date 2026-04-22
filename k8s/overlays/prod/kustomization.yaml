@@ -9,8 +9,11 @@ resources:
 
 patches:
   - path: patches-backend.yaml
+  - path: patches-frontend.yaml
   - path: ingress-patch.yaml
 
 images:
   - name: office-space-allocation/backend
+    newTag: prod
+  - name: office-space-allocation/frontend
     newTag: prod

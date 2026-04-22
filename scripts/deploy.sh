@@ -7,6 +7,7 @@
 #   JWT_SIGNING_KEY    — JWT secret key (auto-generated if not set)
 #   POSTGRES_DB        — database name (default: office_space_allocation)
 #   POSTGRES_USER      — database user (default: postgres)
+#   VITE_API_BASE_URL  — frontend API base URL (default: /v1)
 #
 set -euo pipefail
 
@@ -20,39 +21,51 @@ fi
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="${ENV}"
 IMAGE_BACKEND="office-space-allocation/backend:${TAG}"
+IMAGE_FRONTEND="office-space-allocation/frontend:${TAG}"
 NAMESPACE="flowdesk-${ENV}"
 
 echo "=== Deploying environment: ${ENV} ==="
 echo "  Backend image:  ${IMAGE_BACKEND}"
+echo "  Frontend image: ${IMAGE_FRONTEND}"
 echo "  Namespace:      ${NAMESPACE}"
 echo ""
 
 # -------------------------------------------------------
-# Step 1: Build Docker image
+# Step 1: Build Docker images
 # -------------------------------------------------------
-echo "=== [1/5] Building backend Docker image ==="
+echo "=== [1/6] Building backend Docker image ==="
 docker build -t "${IMAGE_BACKEND}" "${PROJECT_ROOT}/apps/backend"
 
+echo ""
+echo "=== [2/6] Building frontend Docker image ==="
+FRONTEND_API_URL="${VITE_API_BASE_URL:-/v1}"
+docker build \
+  --build-arg "VITE_API_BASE_URL=${FRONTEND_API_URL}" \
+  -t "${IMAGE_FRONTEND}" \
+  "${PROJECT_ROOT}/apps/frontend"
+
 # -------------------------------------------------------
-# Step 2: Import image into k3s
+# Step 2: Import images into k3s
 # -------------------------------------------------------
 echo ""
-echo "=== [2/5] Importing image into k3s ==="
+echo "=== [3/6] Importing images into k3s ==="
 docker save "${IMAGE_BACKEND}" | k3s ctr images import -
-echo "Image imported successfully"
+echo "Backend image imported"
+docker save "${IMAGE_FRONTEND}" | k3s ctr images import -
+echo "Frontend image imported"
 
 # -------------------------------------------------------
 # Step 3: Create namespace
 # -------------------------------------------------------
 echo ""
-echo "=== [3/5] Creating namespace ==="
+echo "=== [4/6] Creating namespace ==="
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 # -------------------------------------------------------
 # Step 4: Create migrations ConfigMap + secrets
 # -------------------------------------------------------
 echo ""
-echo "=== [4/5] Creating ConfigMap and secrets ==="
+echo "=== [5/6] Creating ConfigMap and secrets ==="
 
 kubectl create configmap migrations \
   --namespace="${NAMESPACE}" \
@@ -115,7 +128,7 @@ fi
 # Step 5: Apply Kubernetes manifests
 # -------------------------------------------------------
 echo ""
-echo "=== [5/5] Applying Kubernetes manifests ==="
+echo "=== [6/6] Applying Kubernetes manifests ==="
 
 kubectl apply -k "${PROJECT_ROOT}/k8s/overlays/${ENV}"
 
@@ -126,6 +139,10 @@ kubectl rollout status statefulset/postgres -n "${NAMESPACE}" --timeout=180s
 echo ""
 echo "Waiting for backend rollout..."
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=180s
+
+echo ""
+echo "Waiting for frontend rollout..."
+kubectl rollout status deployment/frontend -n "${NAMESPACE}" --timeout=120s
 
 echo ""
 echo "============================================"

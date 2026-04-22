@@ -6,6 +6,8 @@ resources:
   - ingress.yaml
   - backend/deployment.yaml
   - backend/service.yaml
+  - frontend/deployment.yaml
+  - frontend/service.yaml
   - postgres/statefulset.yaml
   - postgres/service.yaml
 

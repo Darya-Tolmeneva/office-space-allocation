@@ -50,3 +50,36 @@ jobs:
         env:
           POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/office_space_allocation_test?sslmode=disable
           JWT_SIGNING_KEY: ci-test-key-not-for-production
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: /v1
