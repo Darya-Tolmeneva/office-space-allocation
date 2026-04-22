@@ -21,6 +21,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script_stop: true
+          debug: true
           envs: POSTGRES_PASSWORD,JWT_SIGNING_KEY,POSTGRES_DB,POSTGRES_USER
           script: |
             set -euo pipefail
@@ -33,6 +34,11 @@ jobs:
               cd "$PROJECT_DIR"
               git fetch origin main
               git reset --hard origin/main
+            elif [ -d "$PROJECT_DIR" ]; then
+              echo "=== Directory exists but is not a git repo, re-creating ==="
+              rm -rf "$PROJECT_DIR"
+              git clone https://github.com/${{ github.repository }}.git "$PROJECT_DIR"
+              cd "$PROJECT_DIR"
             else
               echo "=== Cloning repository ==="
               git clone https://github.com/${{ github.repository }}.git "$PROJECT_DIR"
