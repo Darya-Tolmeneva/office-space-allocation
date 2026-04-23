@@ -9,6 +9,7 @@ import (
 
 	"office-space-allocation/apps/backend/internal/domain"
 	"office-space-allocation/apps/backend/internal/pkg/logctx"
+	"office-space-allocation/apps/backend/internal/pkg/metrics"
 	"office-space-allocation/apps/backend/internal/service"
 )
 
@@ -82,6 +83,7 @@ func (handler *AuthHandler) Register(writer http.ResponseWriter, request *http.R
 		return
 	}
 
+	metrics.AuthRegistrationsTotal.Inc()
 	writeJSON(writer, http.StatusCreated, toAuthResponse(result))
 }
 
@@ -121,10 +123,12 @@ func (handler *AuthHandler) Login(writer http.ResponseWriter, request *http.Requ
 
 	result, err := handler.authService.Login(request.Context(), input)
 	if err != nil {
+		metrics.AuthLoginsTotal.WithLabelValues("failure").Inc()
 		writeDomainError(writer, request.Context(), err)
 		return
 	}
 
+	metrics.AuthLoginsTotal.WithLabelValues("success").Inc()
 	writeJSON(writer, http.StatusOK, toAuthResponse(result))
 }
 
