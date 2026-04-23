@@ -8,9 +8,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"office-space-allocation/apps/backend/internal/pkg/config"
 	"office-space-allocation/apps/backend/internal/pkg/logctx"
+	"office-space-allocation/apps/backend/internal/pkg/metrics"
 )
 
 const maxRequestBodyBytes = 1 << 20 // 1 MB
@@ -33,11 +35,13 @@ func NewRouter(dependencies Dependencies) stdhttp.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
+	router.Use(metrics.Middleware)
 	router.Use(slogMiddleware(logger))
 	router.Use(maxBodySizeMiddleware(maxRequestBodyBytes))
 	router.Use(corsMiddleware(dependencies.AllowedOrigins))
 
 	router.Get("/healthz", handleHealth(dependencies.DBPing))
+	router.Handle("/metrics", promhttp.Handler())
 
 	router.Route("/v1", func(router chi.Router) {
 		if dependencies.AuthService != nil {

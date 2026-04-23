@@ -51,3 +51,8 @@ jobs:
               POSTGRES_DB='${{ secrets.POSTGRES_DB }}' \
               POSTGRES_USER='${{ secrets.POSTGRES_USER }}' \
               bash scripts/deploy.sh test
+
+            echo "=== Deploying monitoring stack ==="
+            sudo \
+              GRAFANA_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}' \
+              bash scripts/deploy-monitoring.sh

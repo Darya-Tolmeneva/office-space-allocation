@@ -11,6 +11,8 @@ import (
 
 	"office-space-allocation/apps/backend/internal/job"
 	"office-space-allocation/apps/backend/internal/pkg/config"
+	"office-space-allocation/apps/backend/internal/pkg/metrics"
+	"office-space-allocation/apps/backend/internal/repository"
 	"office-space-allocation/apps/backend/internal/repository/postgres"
 	"office-space-allocation/apps/backend/internal/service"
 	httptransport "office-space-allocation/apps/backend/internal/transport/http"
@@ -22,6 +24,7 @@ type App struct {
 	shutdownTimeout time.Duration
 	database        *sqlx.DB
 	expiryJob       *job.ExpiryJob
+	metricsDeps     metrics.CollectorDeps
 }
 
 // New builds the application with baseline dependencies.
@@ -87,6 +90,11 @@ func New() (*App, error) {
 		shutdownTimeout: applicationConfig.HTTP.ShutdownTimeout,
 		database:        database,
 		expiryJob:       job.NewExpiryJob(reservationRepository, time.Minute),
+		metricsDeps: metrics.CollectorDeps{
+			Reservations: repository.ReservationRepository(reservationRepository),
+			Desks:        repository.DeskRepository(deskRepository),
+			Floors:       repository.FloorRepository(floorRepository),
+		},
 	}, nil
 }
 
@@ -101,6 +109,7 @@ func (application *App) Run(ctx context.Context) error {
 	errorChannel := make(chan error, 1)
 
 	go application.expiryJob.Run(ctx)
+	go metrics.RunCollector(ctx, application.metricsDeps, 30*time.Second)
 
 	go func() {
 		if err := application.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
