@@ -35,6 +35,22 @@ data:
           - source_labels: [__meta_kubernetes_service_name]
             target_label: service
 
+      # Scrape node-exporter for VM hardware metrics
+      - job_name: "node-exporter"
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - monitoring
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+
       # Scrape Prometheus itself
       - job_name: "prometheus"
         static_configs:
