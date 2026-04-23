@@ -4,8 +4,7 @@ metadata:
   name: app-ingress
 spec:
   rules:
-    - host: flowdesk.example.com
-      http:
+    - http:
         paths:
           - path: /v1
             pathType: Prefix

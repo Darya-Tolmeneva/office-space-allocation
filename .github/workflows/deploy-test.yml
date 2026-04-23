@@ -19,9 +19,7 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          script_stop: true
-          debug: true
-          envs: POSTGRES_PASSWORD,JWT_SIGNING_KEY,POSTGRES_DB,POSTGRES_USER
+          command_timeout: 20m
           script: |
             set -euo pipefail
 
@@ -32,7 +30,7 @@ jobs:
               echo "=== Updating existing repository ==="
               cd "$PROJECT_DIR"
               git fetch origin
-              git reset --hard origin/${{ github.ref_name }}
+              git reset --hard origin/main
             elif [ -d "$PROJECT_DIR" ]; then
               echo "=== Directory exists but is not a git repo, re-creating ==="
               rm -rf "$PROJECT_DIR"
@@ -44,11 +42,12 @@ jobs:
               cd "$PROJECT_DIR"
             fi
 
-            # Run deploy script — env vars are passed from GitHub Secrets
+            # Pass secrets as env vars directly to sudo
+            # (sudo -E may not preserve vars due to env_reset in sudoers)
             echo "=== Running deploy.sh test ==="
-            sudo -E bash scripts/deploy.sh test
-        env:
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+            sudo \
+              POSTGRES_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+              JWT_SIGNING_KEY='${{ secrets.JWT_SIGNING_KEY }}' \
+              POSTGRES_DB='${{ secrets.POSTGRES_DB }}' \
+              POSTGRES_USER='${{ secrets.POSTGRES_USER }}' \
+              bash scripts/deploy.sh test
