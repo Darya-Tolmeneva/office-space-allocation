@@ -58,6 +58,11 @@ echo "=== [3/3] Applying monitoring manifests ==="
 kubectl apply -k "${PROJECT_ROOT}/k8s/base/monitoring"
 
 echo ""
+echo "Restarting deployments to pick up config changes..."
+kubectl rollout restart deployment/prometheus -n "${NAMESPACE}"
+kubectl rollout restart deployment/grafana -n "${NAMESPACE}"
+
+echo ""
 echo "Waiting for Prometheus rollout..."
 kubectl rollout status deployment/prometheus -n "${NAMESPACE}" --timeout=120s
 

@@ -9,47 +9,25 @@ data:
       evaluation_interval: 15s
 
     scrape_configs:
-      # Scrape the FlowDesk backend /metrics endpoint
+      # Scrape the FlowDesk backend in test namespace
       - job_name: "flowdesk-backend"
-        kubernetes_sd_configs:
-          - role: endpoints
-        relabel_configs:
-          # Only scrape endpoints from the "backend" service
-          - source_labels: [__meta_kubernetes_service_name]
-            action: keep
-            regex: backend
-          # Only scrape endpoints in the flowdesk-* namespaces
-          - source_labels: [__meta_kubernetes_namespace]
-            action: keep
-            regex: flowdesk-.*
-          # Set the metrics path
-          - target_label: __metrics_path__
-            replacement: /metrics
-          # Add namespace label
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          # Add pod label
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
-          # Add service label
-          - source_labels: [__meta_kubernetes_service_name]
-            target_label: service
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - "backend.flowdesk-test.svc.cluster.local:8080"
+            labels:
+              namespace: flowdesk-test
+          - targets:
+              - "backend.flowdesk-prod.svc.cluster.local:8080"
+            labels:
+              namespace: flowdesk-prod
 
       # Scrape node-exporter for VM hardware metrics
+      # node-exporter uses hostNetwork, so we target the k8s node IP
+      # On single-node k3s, the node internal IP is reachable from any pod
       - job_name: "node-exporter"
-        kubernetes_sd_configs:
-          - role: endpoints
-            namespaces:
-              names:
-                - monitoring
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_service_name]
-            action: keep
-            regex: node-exporter
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_node_name]
-            target_label: node
+        static_configs:
+          - targets: ["node-exporter.monitoring.svc.cluster.local:9100"]
 
       # Scrape Prometheus itself
       - job_name: "prometheus"
