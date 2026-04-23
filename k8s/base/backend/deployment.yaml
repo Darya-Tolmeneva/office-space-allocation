@@ -43,7 +43,7 @@ spec:
       containers:
         - name: backend
           image: office-space-allocation/backend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
               protocol: TCP

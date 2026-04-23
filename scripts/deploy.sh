@@ -133,6 +133,11 @@ echo "=== [6/6] Applying Kubernetes manifests ==="
 kubectl apply -k "${PROJECT_ROOT}/k8s/overlays/${ENV}"
 
 echo ""
+echo "Restarting deployments to pick up new images..."
+kubectl rollout restart deployment/backend -n "${NAMESPACE}"
+kubectl rollout restart deployment/frontend -n "${NAMESPACE}"
+
+echo ""
 echo "Waiting for postgres to be ready..."
 kubectl rollout status statefulset/postgres -n "${NAMESPACE}" --timeout=180s
 
